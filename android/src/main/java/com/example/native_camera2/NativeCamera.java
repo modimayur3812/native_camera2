@@ -5,6 +5,7 @@ import static android.hardware.camera2.CameraMetadata.LENS_FACING_FRONT;
 
 import android.app.Activity;
 import android.graphics.ImageFormat;
+import android.graphics.Point;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -22,6 +23,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
 import android.util.Size;
+import android.view.Display;
 import android.view.Surface;
 
 import androidx.annotation.NonNull;
@@ -34,7 +36,6 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -90,17 +91,18 @@ public class NativeCamera {
         CameraCharacteristics cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraProperties.getCameraName());
 
         Size[] sizeArray = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.JPEG);
+        Size cameraPreviewSize = new Size(1920, 1080);
+        if (!Arrays.asList(sizeArray).contains(cameraPreviewSize)) {
+            Display activityDisplay = activity.getWindowManager().getDefaultDisplay();
+            Point point = new Point();
+            activityDisplay.getRealSize(point);
+            cameraPreviewSize = new Size(point.x, point.y);
+        }
 
-        Size size = Collections.max(Arrays.asList(sizeArray), (o1, o2) -> {
-            Integer value1 = o1.getHeight() * o1.getWidth();
-            Integer value2 = o2.getHeight() * o2.getWidth();
-            return value1.compareTo(value2);
-        });
-
-        imageReader = ImageReader.newInstance(size.getWidth(), size.getHeight(), ImageFormat.JPEG, 1);
+        imageReader = ImageReader.newInstance(cameraPreviewSize.getWidth(), cameraPreviewSize.getHeight(), ImageFormat.JPEG, 1);
 
         SurfaceTexture surfaceTexture = flutterTexture.surfaceTexture();
-        surfaceTexture.setDefaultBufferSize(size.getWidth(), size.getHeight());
+        surfaceTexture.setDefaultBufferSize(cameraPreviewSize.getWidth(), cameraPreviewSize.getHeight());
 
         surface = new Surface(surfaceTexture);
 
@@ -425,11 +427,14 @@ public class NativeCamera {
         CameraCharacteristics cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraProperties.getCameraName());
 
         Size[] sizeArray = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.JPEG);
-        return Collections.max(Arrays.asList(sizeArray), (o1, o2) -> {
-            Integer value1 = o1.getHeight() * o1.getWidth();
-            Integer value2 = o2.getHeight() * o2.getWidth();
-            return value1.compareTo(value2);
-        });
+        Size cameraPreviewSize = new Size(1920, 1080);
+        if (!Arrays.asList(sizeArray).contains(cameraPreviewSize)) {
+            Display activityDisplay = activity.getWindowManager().getDefaultDisplay();
+            Point point = new Point();
+            activityDisplay.getRealSize(point);
+            cameraPreviewSize = new Size(point.x, point.y);
+        }
+        return cameraPreviewSize;
     }
 
     /** Pause the preview from dart. */
