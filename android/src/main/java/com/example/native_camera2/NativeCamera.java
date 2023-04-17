@@ -3,20 +3,26 @@ package com.example.native_camera2;
 import static android.hardware.camera2.CameraCharacteristics.LENS_FACING;
 import static android.hardware.camera2.CameraMetadata.LENS_FACING_FRONT;
 
+import static androidx.core.math.MathUtils.clamp;
+
 import android.app.Activity;
 import android.graphics.ImageFormat;
 import android.graphics.Point;
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import androidx.exifinterface.media.ExifInterface;
+
+import android.hardware.camera2.params.MeteringRectangle;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Handler;
@@ -39,6 +45,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.IntStream;
 
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.view.TextureRegistry;
@@ -89,6 +96,14 @@ public class NativeCamera {
         }
 
         CameraCharacteristics cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraProperties.getCameraName());
+        int[] capabilities = cameraCharacteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            boolean isManualFocusSupported = IntStream.of(capabilities).anyMatch(x -> x == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR);
+            if (isManualFocusSupported) {
+
+            }
+        }
 
         Size[] sizeArray = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.JPEG);
         Size cameraPreviewSize = new Size(1920, 1080);
@@ -117,9 +132,38 @@ public class NativeCamera {
         CaptureRequest.Builder captureRequest = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
         captureRequest.addTarget(surface);
 
+        //cameraPreviewSize.getHeight() / 2;
+        //        cameraPreviewSize.getWidth() / 2
         new Handler().postDelayed(() -> {
             if (captureSession != null) {
                 try {
+//                    CameraManager cameraManager = CameraUtils.getCameraManager(activity);
+//                    CameraCharacteristics cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraProperties.getCameraName());
+//                    Rect rect = cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+//                    Log.i(TAG, "SENSOR_INFO_ACTIVE_ARRAY_SIZE,,,,,,,,rect.left--->" + rect.left + ",,,rect.top--->" + rect.top + ",,,,rect.right--->" + rect.right + ",,,,rect.bottom---->" + rect.bottom);
+//                    Size size = cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE);
+//                    Log.i("onAreaTouchEvent", "mCameraCharacteristics,,,,size.getWidth()--->" + size.getWidth() + ",,,size.getHeight()--->" + size.getHeight());
+//                    int areaSize = 200;
+//                    int right = rect.right;
+//                    int bottom = rect.bottom;
+//                    int viewWidth = getPreviewSize().getWidth();
+//                    int viewHeight = getPreviewSize().getHeight();
+//                    int ll, rr;
+//                    Rect newRect;
+//                    int centerX = (int) viewWidth / 2;
+//                    int centerY = (int) viewHeight / 2;
+//                    ll = ((centerX * right) - areaSize) / viewWidth;
+//                    rr = ((centerY * bottom) - areaSize) / viewHeight;
+//                    int focusLeft = clamp(ll, 0, right);
+//                    int focusBottom = clamp(rr, 0, bottom);
+//                    Log.i(TAG, "focusLeft--->" + focusLeft + ",,,focusTop--->" + focusBottom + ",,,focusRight--->" + (focusLeft + areaSize) + ",,,focusBottom--->" + (focusBottom + areaSize));
+//                    newRect = new Rect(focusLeft, focusBottom, focusLeft + areaSize, focusBottom + areaSize);
+//                    MeteringRectangle meteringRectangle = new MeteringRectangle(newRect, 500);
+//                    MeteringRectangle[] meteringRectangleArr = {meteringRectangle};
+//                    captureRequest.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL);
+//                    captureRequest.set(CaptureRequest.CONTROL_AF_REGIONS, meteringRectangleArr);
+//                    captureRequest.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+                    captureRequest.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                     captureSession.setRepeatingRequest(captureRequest.build(), null, cameraHandler);
                 } catch (CameraAccessException | IllegalStateException e) {
                     e.printStackTrace();
@@ -290,6 +334,18 @@ public class NativeCamera {
             public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                 super.onCaptureCompleted(session, request, result);
                 Log.i(TAG, "onCaptureCompleted: ");
+                Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
+                Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
+                if (afState == null || aeState == null) {
+                    return;
+                }
+                Log.i(TAG, "onCaptureCompleted: " + afState + " , " + aeState);
+                if (afState == CameraMetadata.CONTROL_AF_STATE_FOCUSED_LOCKED || afState == CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED) {
+                    Log.i("DngSessionCallback", " aeState.intValue()--->" + aeState);
+                    if (aeState == CameraMetadata.CONTROL_AE_STATE_LOCKED || aeState == CameraMetadata.CONTROL_AE_STATE_CONVERGED || aeState == CameraMetadata.CONTROL_AE_STATE_PRECAPTURE || aeState == CameraMetadata.CONTROL_AE_STATE_FLASH_REQUIRED) {
+                        Log.i("DngSessionCallback", " inner aeState.intValue()--->" + aeState);
+                    }
+                }
             }
 
             @Override
